@@ -1,12 +1,14 @@
 import {
   Camera,
-  useCameraDevices,
   sortFormats,
+  useCameraDevices,
+  frameRateIncluded,
 } from 'react-native-vision-camera';
 import {useIsFocused} from '@react-navigation/native';
 import {useIsForeground} from '../hooks/useIsForeground';
 import IonIcon from 'react-native-vector-icons/Ionicons';
 import {Text, StyleSheet, View, TouchableOpacity} from 'react-native';
+import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 const BUTTON_SIZE = 40;
@@ -18,9 +20,13 @@ const CameraScreen = ({navigation}) => {
   const isFocused = useIsFocused();
   const isForeground = useIsForeground();
   const isActive = isFocused && isForeground;
-  const [cameraPosition, setCameraPosition] = useState('back');
   const [flash, setFlash] = useState('off');
-
+  const [enableHdr, setEnableHdr] = useState(false);
+  const [cameraPosition, setCameraPosition] = useState('back');
+  const [enableNightMode, setEnableNightMode] = useState(false);
+  const canToggleNightMode = enableNightMode
+    ? true // it's enabled so you have to be able to turn it off again
+    : (device?.supportsLowLightBoost ?? false) || fps > 30; // either we have native support, or we can lower the FPS
   const device = devices[cameraPosition];
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
   const takePhotoOptions = useMemo(
@@ -39,6 +45,56 @@ const CameraScreen = ({navigation}) => {
     }
     return device.formats.sort(sortFormats);
   }, [device?.formats]);
+
+  const [is60Fps, setIs60Fps] = useState(true);
+  const fps = useMemo(() => {
+    if (!is60Fps) {
+      return 30;
+    }
+
+    if (enableNightMode && !device?.supportsLowLightBoost) {
+      // User has enabled Night Mode, but Night Mode is not natively supported, so we simulate it by lowering the frame rate.
+      return 30;
+    }
+
+    const supportsHdrAt60Fps = formats.some(
+      f =>
+        f.supportsVideoHDR &&
+        f.frameRateRanges.some(r => frameRateIncluded(r, 60)),
+    );
+    if (enableHdr && !supportsHdrAt60Fps) {
+      // User has enabled HDR, but HDR is not supported at 60 FPS.
+      return 30;
+    }
+
+    const supports60Fps = formats.some(f =>
+      f.frameRateRanges.some(r => frameRateIncluded(r, 60)),
+    );
+    if (!supports60Fps) {
+      // 60 FPS is not supported by any format.
+      return 30;
+    }
+    // If nothing blocks us from using it, we default to 60 FPS.
+    return 60;
+  }, [
+    device?.supportsLowLightBoost,
+    enableHdr,
+    enableNightMode,
+    formats,
+    is60Fps,
+  ]);
+
+  const supportsHdr = useMemo(
+    () => formats.some(f => f.supportsVideoHDR || f.supportsPhotoHDR),
+    [formats],
+  );
+  const supports60Fps = useMemo(
+    () =>
+      formats.some(f =>
+        f.frameRateRanges.some(rate => frameRateIncluded(rate, 60)),
+      ),
+    [formats],
+  );
 
   const supportsCameraFlipping = useMemo(
     () => devices.back != null && devices.front != null,
@@ -89,11 +145,14 @@ const CameraScreen = ({navigation}) => {
     );
   }
 
+  console.log('123 ', supports60Fps, supportsHdr, canToggleNightMode);
+
   return (
     <View style={{flex: 1}}>
       <Camera
         ref={camera}
         style={{flex: 1}}
+        fps={fps}
         device={device}
         isActive={isActive}
         photo={true}
@@ -132,6 +191,39 @@ const CameraScreen = ({navigation}) => {
             disabledOpacity={0.4}>
             <IonIcon
               name={flash === 'on' ? 'flash' : 'flash-off'}
+              color="white"
+              size={24}
+            />
+          </TouchableOpacity>
+        )}
+        {supports60Fps && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => setIs60Fps(!is60Fps)}>
+            <Text style={styles.text}>
+              {is60Fps ? '60' : '30'}
+              {'\n'}FPS
+            </Text>
+          </TouchableOpacity>
+        )}
+        {supportsHdr && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => setEnableHdr(h => !h)}>
+            <MaterialIcon
+              name={enableHdr ? 'hdr' : 'hdr-off'}
+              color="white"
+              size={24}
+            />
+          </TouchableOpacity>
+        )}
+        {canToggleNightMode && (
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => setEnableNightMode(!enableNightMode)}
+            disabledOpacity={0.4}>
+            <IonIcon
+              name={enableNightMode ? 'moon' : 'moon-outline'}
               color="white"
               size={24}
             />
