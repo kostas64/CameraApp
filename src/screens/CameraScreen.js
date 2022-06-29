@@ -7,38 +7,59 @@ import {
 import {useIsFocused} from '@react-navigation/native';
 import {useIsForeground} from '../hooks/useIsForeground';
 import IonIcon from 'react-native-vector-icons/Ionicons';
+import Reanimated, {
+  Extrapolate,
+  interpolate,
+  useAnimatedGestureHandler,
+  useAnimatedProps,
+  useSharedValue,
+} from 'react-native-reanimated';
 import {Text, StyleSheet, View, TouchableOpacity} from 'react-native';
 import MaterialIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import CaptureButton from '../components/CaptureButton';
+import {
+  PinchGestureHandler,
+  TapGestureHandler,
+} from 'react-native-gesture-handler';
 
 const BUTTON_SIZE = 40;
+const SCALE_FULL_ZOOM = 3;
 const CONTENT_SPACING = 10;
+const MAX_ZOOM_FACTOR = 20;
+
+const ReanimatedCamera = Reanimated.createAnimatedComponent(Camera);
+Reanimated.addWhitelistedNativeProps({
+  zoom: true,
+});
 
 const CameraScreen = ({navigation}) => {
   const camera = useRef(null);
   const devices = useCameraDevices();
   const isFocused = useIsFocused();
   const isForeground = useIsForeground();
+  const isPressingButton = useSharedValue(false);
   const isActive = isFocused && isForeground;
   const [flash, setFlash] = useState('off');
   const [enableHdr, setEnableHdr] = useState(false);
   const [cameraPosition, setCameraPosition] = useState('back');
   const [enableNightMode, setEnableNightMode] = useState(false);
+  const [isCameraInitialized, setIsCameraInitialized] = useState(false);
+  const zoom = useSharedValue(0);
+  const minZoom = device?.minZoom ?? 1;
+  const maxZoom = Math.min(device?.maxZoom ?? 1, MAX_ZOOM_FACTOR);
+  const cameraAnimatedProps = useAnimatedProps(() => {
+    const z = Math.max(Math.min(zoom.value, maxZoom), minZoom);
+    return {
+      zoom: z,
+    };
+  }, [maxZoom, minZoom, zoom]);
   const canToggleNightMode = enableNightMode
     ? true // it's enabled so you have to be able to turn it off again
     : (device?.supportsLowLightBoost ?? false) || fps > 30; // either we have native support, or we can lower the FPS
   const device = devices[cameraPosition];
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState(false);
-  const takePhotoOptions = useMemo(
-    () => ({
-      photoCodec: 'jpeg',
-      qualityPrioritization: 'speed',
-      flash: flash,
-      quality: 90,
-      skipMetadata: true,
-    }),
-    [flash],
-  );
+
   const formats = useMemo(() => {
     if (device?.formats == null) {
       return [];
@@ -102,25 +123,42 @@ const CameraScreen = ({navigation}) => {
   );
   const supportsFlash = device?.hasFlash ?? false;
 
+  const format = useMemo(() => {
+    let result = formats;
+    if (enableHdr) {
+      // We only filter by HDR capable formats if HDR is set to true.
+      // Otherwise we ignore the `supportsVideoHDR` property and accept formats which support HDR `true` or `false`
+      result = result.filter(f => f.supportsVideoHDR || f.supportsPhotoHDR);
+    }
+
+    // find the first format that includes the given FPS
+    return result.find(f =>
+      f.frameRateRanges.some(r => frameRateIncluded(r, fps)),
+    );
+  }, [formats, fps, enableHdr]);
+
   const onFlipCameraPressed = useCallback(() => {
     setCameraPosition(p => (p === 'back' ? 'front' : 'back'));
   }, []);
-
-  const takePhoto = useCallback(async () => {
-    try {
-      if (camera.current == null) {
-        throw new Error('Camera ref is null!');
-      }
-
-      const photo = await camera.current.takePhoto(takePhotoOptions);
-      onMediaCaptured(photo, 'photo');
-    } catch (error) {}
-  }, [camera, onMediaCaptured, takePhotoOptions]);
 
   useEffect(() => {
     Camera.getMicrophonePermissionStatus().then(status =>
       setHasMicrophonePermission(status === 'authorized'),
     );
+  }, []);
+
+  const setIsPressingButton = useCallback(
+    _isPressingButton => {
+      isPressingButton.value = _isPressingButton;
+    },
+    [isPressingButton],
+  );
+
+  const onError = useCallback(error => {
+    console.error(error);
+  }, []);
+  const onInitialized = useCallback(() => {
+    setIsCameraInitialized(true);
   }, []);
 
   const onMediaCaptured = useCallback(
@@ -137,6 +175,32 @@ const CameraScreen = ({navigation}) => {
     setFlash(f => (f === 'off' ? 'on' : 'off'));
   }, []);
 
+  const onDoubleTap = useCallback(() => {
+    onFlipCameraPressed();
+  }, [onFlipCameraPressed]);
+
+  const onPinchGesture = useAnimatedGestureHandler({
+    onStart: (_, context) => {
+      context.startZoom = zoom.value;
+    },
+    onActive: (event, context) => {
+      // we're trying to map the scale gesture to a linear zoom here
+      const startZoom = context.startZoom ?? 0;
+      const scale = interpolate(
+        event.scale,
+        [1 - 1 / SCALE_FULL_ZOOM, 1, SCALE_FULL_ZOOM],
+        [-1, 0, 1],
+        Extrapolate.CLAMP,
+      );
+      zoom.value = interpolate(
+        scale,
+        [-1, 0, 1],
+        [minZoom, startZoom, maxZoom],
+        Extrapolate.CLAMP,
+      );
+    },
+  });
+
   if (device == null) {
     return (
       <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
@@ -149,30 +213,43 @@ const CameraScreen = ({navigation}) => {
 
   return (
     <View style={{flex: 1}}>
-      <Camera
-        ref={camera}
-        style={{flex: 1}}
-        fps={fps}
-        device={device}
-        isActive={isActive}
-        photo={true}
-        video={true}
-        audio={hasMicrophonePermission}
-      />
+      <PinchGestureHandler onGestureEvent={onPinchGesture} enabled={isActive}>
+        <Reanimated.View style={StyleSheet.absoluteFill}>
+          <TapGestureHandler onEnded={onDoubleTap} numberOfTaps={2}>
+            <ReanimatedCamera
+              ref={camera}
+              style={StyleSheet.absoluteFill}
+              device={device}
+              format={format}
+              fps={fps}
+              hdr={enableHdr}
+              lowLightBoost={device.supportsLowLightBoost && enableNightMode}
+              isActive={isActive}
+              onInitialized={onInitialized}
+              onError={onError}
+              enableZoomGesture={false}
+              animatedProps={cameraAnimatedProps}
+              photo={true}
+              video={true}
+              audio={hasMicrophonePermission}
+              orientation="portrait"
+            />
+          </TapGestureHandler>
+        </Reanimated.View>
+      </PinchGestureHandler>
 
       {/* CAPTURE BUTTON */}
-      <View style={styles.captureButton}>
-        <TouchableOpacity onPress={takePhoto}>
-          <View
-            style={{
-              height: 40,
-              width: 40,
-              borderRadius: 25,
-              backgroundColor: 'grey',
-            }}
-          />
-        </TouchableOpacity>
-      </View>
+      <CaptureButton
+        style={styles.captureButton}
+        camera={camera}
+        onMediaCaptured={onMediaCaptured}
+        cameraZoom={zoom}
+        minZoom={minZoom}
+        maxZoom={maxZoom}
+        flash={supportsFlash ? flash : 'off'}
+        enabled={isCameraInitialized && isActive}
+        setIsPressingButton={setIsPressingButton}
+      />
 
       {/*OTHER BUTTONS */}
       <View style={styles.rightButtonRow}>
