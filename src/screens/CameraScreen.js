@@ -278,6 +278,13 @@ const CameraScreen = ({navigation}) => {
       />
 
       {/*OTHER BUTTONS */}
+      <View style={styles.leftButtonRow}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.goBack()}>
+          <IonIcon name="arrow-back" color="white" size={24} />
+        </TouchableOpacity>
+      </View>
       <View style={styles.rightButtonRow}>
         {supportsCameraFlipping && (
           <TouchableOpacity
@@ -361,6 +368,11 @@ const styles = StyleSheet.create({
   rightButtonRow: {
     position: 'absolute',
     right: SAFE_AREA_PADDING.paddingRight,
+    top: SAFE_AREA_PADDING.paddingTop,
+  },
+  leftButtonRow: {
+    position: 'absolute',
+    left: SAFE_AREA_PADDING.paddingLeft,
     top: SAFE_AREA_PADDING.paddingTop,
   },
   text: {
