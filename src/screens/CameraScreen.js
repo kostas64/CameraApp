@@ -164,7 +164,8 @@ const CameraScreen = ({navigation}) => {
     (media, type) => {
       console.log(`Media captured! ${JSON.stringify(media)}`);
       navigation.navigate('Preview', {
-        media: media.path,
+        media: media,
+        path: media.path,
         type: type,
       });
     },
