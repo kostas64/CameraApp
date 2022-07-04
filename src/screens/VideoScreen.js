@@ -75,10 +75,13 @@ const VideoScreen = ({navigation, route}) => {
         <View
           style={{
             position: 'absolute',
-            top: Dimensions.get('window').width / 7 - 10,
-            left: Dimensions.get('window').width / 7 - 10,
+            top: Dimensions.get('window').width / 9,
+            left:
+              index !== 0 && index % 3 !== 0
+                ? Dimensions.get('window').width / 9 + 8
+                : Dimensions.get('window').width / 9,
           }}>
-          <AntDesign size={20} color={'black'} name={'play'} />
+          <AntDesign size={20} color={'white'} name={'play'} />
         </View>
       </View>
     );
@@ -104,7 +107,10 @@ const VideoScreen = ({navigation, route}) => {
     <View
       style={[
         styles.container,
-        Platform.OS === 'ios' && {paddingTop: SAFE_AREA_PADDING.paddingTop},
+        Platform.OS === 'ios' && {
+          paddingTop: SAFE_AREA_PADDING.paddingTop,
+          paddingBottom: SAFE_AREA_PADDING.paddingBottom + 32,
+        },
       ]}>
       <View style={styles.titleContainer}>
         <Text style={styles.title}>Video Gallery</Text>
@@ -114,6 +120,7 @@ const VideoScreen = ({navigation, route}) => {
         renderItem={renderItem}
         style={styles.flatlist}
         numColumns={3}
+        showsVerticalScrollIndicator={false}
       />
     </View>
   );

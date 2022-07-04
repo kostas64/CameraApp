@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import uuid from 'react-native-uuid';
 import Video from 'react-native-video';
 import {storage} from '../../firebase';
 import {SAFE_AREA_PADDING} from '../Constants';
@@ -134,10 +133,10 @@ const PreviewScreen = ({navigation, route}) => {
 
   const uploadHandler = async () => {
     setUploading(true);
-    const uid = uuid.v4();
+    const name = new Date().getTime();
     const mediaRef = ref(
       storage,
-      type === 'photo' ? `images/${uid}` : `videos/${uid}`,
+      type === 'photo' ? `images/${name}` : `videos/${name}`,
     );
 
     fetchBlob(source.uri)
@@ -145,7 +144,7 @@ const PreviewScreen = ({navigation, route}) => {
         uploadBytes(mediaRef, file)
           .then(snapshot => {
             console.log('Media uploaded ', snapshot);
-            thumbnailHandler(uid);
+            thumbnailHandler(name);
           })
           .catch(error => {
             console.log('Error on upload ', error);
@@ -258,7 +257,7 @@ const styles = StyleSheet.create({
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
     borderRadius: BUTTON_SIZE / 2,
-    backgroundColor: 'rgba(140, 140, 140, 0.3)',
+    backgroundColor: 'rgba(140, 140, 140, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },

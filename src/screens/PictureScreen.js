@@ -6,15 +6,19 @@ import {
   StyleSheet,
   Platform,
   Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import {storage} from '../../firebase';
 import {SAFE_AREA_PADDING} from '../Constants';
+import ImageView from 'react-native-image-viewing';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {ref, listAll, getDownloadURL} from 'firebase/storage';
 import React, {useCallback, useEffect, useState} from 'react';
 
 const PictureScreen = ({navigation, route}) => {
   const [images, setImages] = useState([]);
+  const [imageView, setImageView] = useState([]);
+  const [imageViewVis, setImageViewVis] = useState(false);
 
   useEffect(() => {
     const focus = navigation.addListener('focus', () => {
@@ -57,25 +61,37 @@ const PictureScreen = ({navigation, route}) => {
     };
   }, [navigation]);
 
+  useEffect(() => {
+    if (imageView.length !== 0) {
+      setImageViewVis(true);
+    }
+  }, [imageView]);
+
   const listItemsHandler = useCallback(() => {
     const listRef = ref(storage, 'thumb_images/');
+    let tempArray = [];
     listAll(listRef).then(res => {
       res.items.forEach(item => {
-        console.log('item ', item._location.path_);
         const listItemRef = ref(storage, item._location.path_);
 
-        getDownloadURL(listItemRef).then(url =>
-          setImages(oldImages => {
-            return [...oldImages, url];
-          }),
-        );
+        getDownloadURL(listItemRef)
+          .then(url => {
+            tempArray = [...tempArray, url];
+          })
+          .finally(() => {
+            const sortedArray = tempArray.sort((a, b) => {
+              return a < b;
+            });
+            setImages(sortedArray);
+          });
       });
     });
   }, []);
 
   const renderItem = ({item, index}) => {
     return (
-      <View
+      <TouchableOpacity
+        onPress={() => imageOpeningHandler(item)}
         key={index}
         style={[
           styles.itemStyle,
@@ -88,15 +104,23 @@ const PictureScreen = ({navigation, route}) => {
             width: Dimensions.get('window').width / 3.5,
           }}
         />
-      </View>
+      </TouchableOpacity>
     );
+  };
+
+  const imageOpeningHandler = item => {
+    const itemRef = ref(storage, item);
+    getDownloadURL(itemRef).then(url => setImageView([{uri: url}]));
   };
 
   return (
     <View
       style={[
         styles.container,
-        Platform.OS === 'ios' && {paddingTop: SAFE_AREA_PADDING.paddingTop},
+        Platform.OS === 'ios' && {
+          paddingTop: SAFE_AREA_PADDING.paddingTop,
+          paddingBottom: SAFE_AREA_PADDING.paddingBottom + 32,
+        },
       ]}>
       <View style={styles.titleContainer}>
         <Text style={styles.title}>Photo Gallery</Text>
@@ -106,6 +130,13 @@ const PictureScreen = ({navigation, route}) => {
         renderItem={renderItem}
         style={styles.flatlist}
         numColumns={3}
+        showsVerticalScrollIndicator={false}
+      />
+      <ImageView
+        images={imageView}
+        imageIndex={0}
+        visible={imageViewVis}
+        onRequestClose={() => setImageViewVis(false)}
       />
     </View>
   );
