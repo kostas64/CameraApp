@@ -6,15 +6,26 @@ import {
   Dimensions,
   Image,
   FlatList,
+  TouchableOpacity,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import {storage} from '../../firebase';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {ref, listAll, getDownloadURL} from 'firebase/storage';
 import React, {useCallback, useEffect, useState} from 'react';
 import {SAFE_AREA_PADDING} from '../Constants';
+import Video from 'react-native-video';
+import RNFetchBlob from 'rn-fetch-blob';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const VideoScreen = ({navigation, route}) => {
   const [videos, setVideos] = useState([]);
+  const [videoView, setVideoView] = useState({});
+  const [modalVisible, setModalVisible] = useState(false);
+  const [emptyState, setEmptyState] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const focus = navigation.addListener('focus', () => {
@@ -57,9 +68,28 @@ const VideoScreen = ({navigation, route}) => {
     };
   }, [navigation]);
 
+  useEffect(() => {
+    if (videoView.uri) {
+      setModalVisible(true);
+    }
+  }, [videoView]);
+
+  const videoOpeningHandler = async item => {
+    const videoUrl = item.replace('thumb_videos', 'videos');
+    RNFetchBlob.config({
+      fileCache: true,
+    })
+      .fetch('GET', videoUrl)
+      .then(res => {
+        setVideoView({uri: `file:///${res.path()}`});
+      })
+      .catch(err => console.log('Error fetching from storage', err));
+  };
+
   const renderItem = ({item, index}) => {
     return (
-      <View
+      <TouchableOpacity
+        onPress={() => videoOpeningHandler(item)}
         key={index}
         style={[
           styles.itemStyle,
@@ -68,37 +98,52 @@ const VideoScreen = ({navigation, route}) => {
         <Image
           source={{uri: videos[index]}}
           style={{
-            height: Dimensions.get('window').width / 3.5,
-            width: Dimensions.get('window').width / 3.5,
+            height: SCREEN_WIDTH / 3.5,
+            width: SCREEN_WIDTH / 3.5,
           }}
         />
         <View
           style={{
             position: 'absolute',
-            top: Dimensions.get('window').width / 9,
+            top: SCREEN_WIDTH / 9,
             left:
               index !== 0 && index % 3 !== 0
-                ? Dimensions.get('window').width / 9 + 8
-                : Dimensions.get('window').width / 9,
+                ? SCREEN_WIDTH / 9 + 8
+                : SCREEN_WIDTH / 9,
           }}>
           <AntDesign size={20} color={'white'} name={'play'} />
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   const listItemsHandler = useCallback(() => {
     const listRef = ref(storage, 'thumb_videos/');
+    let tempArray = [];
+    setIsLoading(true);
 
     listAll(listRef).then(res => {
+      if (res.items.length === 0) {
+        setEmptyState(true);
+        setIsLoading(false);
+        return;
+      }
+      setEmptyState(false);
+      setIsLoading(false);
+
       res.items.forEach(item => {
         const listItemRef = ref(storage, item._location.path_);
 
-        getDownloadURL(listItemRef).then(url =>
-          setVideos(oldVideos => {
-            return [...oldVideos, url];
-          }),
-        );
+        getDownloadURL(listItemRef)
+          .then(url => {
+            tempArray = [...tempArray, url];
+          })
+          .finally(() => {
+            const sortedArray = tempArray.sort((a, b) => {
+              return a < b;
+            });
+            setVideos(sortedArray);
+          });
       });
     });
   }, []);
@@ -115,13 +160,35 @@ const VideoScreen = ({navigation, route}) => {
       <View style={styles.titleContainer}>
         <Text style={styles.title}>Video Gallery</Text>
       </View>
-      <FlatList
-        data={videos}
-        renderItem={renderItem}
-        style={styles.flatlist}
-        numColumns={3}
-        showsVerticalScrollIndicator={false}
-      />
+      {emptyState && !isLoading && (
+        <View style={styles.center}>
+          <Text style={{fontSize: 20, fontWeight: '700'}}>
+            No videos to show
+          </Text>
+        </View>
+      )}
+      {isLoading && (
+        <View style={styles.center}>
+          <ActivityIndicator size={'large'} />
+        </View>
+      )}
+      {!emptyState && !isLoading && (
+        <>
+          <FlatList
+            data={videos}
+            renderItem={renderItem}
+            style={styles.flatlist}
+            numColumns={3}
+            showsVerticalScrollIndicator={false}
+          />
+
+          <Modal
+            visible={modalVisible}
+            onRequestClose={() => setModalVisible(false)}>
+            <Video source={videoView} style={StyleSheet.absoluteFill} />
+          </Modal>
+        </>
+      )}
     </View>
   );
 };
@@ -129,6 +196,11 @@ const VideoScreen = ({navigation, route}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   titleContainer: {
     padding: 10,

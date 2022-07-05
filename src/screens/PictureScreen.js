@@ -7,6 +7,7 @@ import {
   Platform,
   Dimensions,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import {storage} from '../../firebase';
 import {SAFE_AREA_PADDING} from '../Constants';
@@ -15,10 +16,14 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import {ref, listAll, getDownloadURL} from 'firebase/storage';
 import React, {useCallback, useEffect, useState} from 'react';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
 const PictureScreen = ({navigation, route}) => {
   const [images, setImages] = useState([]);
   const [imageView, setImageView] = useState([]);
   const [imageViewVis, setImageViewVis] = useState(false);
+  const [emptyState, setEmptyState] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const focus = navigation.addListener('focus', () => {
@@ -70,10 +75,20 @@ const PictureScreen = ({navigation, route}) => {
   const listItemsHandler = useCallback(() => {
     const listRef = ref(storage, 'thumb_images/');
     let tempArray = [];
+    setIsLoading(true);
+
     listAll(listRef).then(res => {
+      if (res.items.length === 0) {
+        setEmptyState(true);
+        setIsLoading(false);
+        return;
+      }
+
+      setEmptyState(false);
+      setIsLoading(false);
+
       res.items.forEach(item => {
         const listItemRef = ref(storage, item._location.path_);
-
         getDownloadURL(listItemRef)
           .then(url => {
             tempArray = [...tempArray, url];
@@ -100,8 +115,8 @@ const PictureScreen = ({navigation, route}) => {
         <Image
           source={{uri: images[index]}}
           style={{
-            height: Dimensions.get('window').width / 3.5,
-            width: Dimensions.get('window').width / 3.5,
+            height: SCREEN_WIDTH / 3.5,
+            width: SCREEN_WIDTH / 3.5,
           }}
         />
       </TouchableOpacity>
@@ -125,19 +140,35 @@ const PictureScreen = ({navigation, route}) => {
       <View style={styles.titleContainer}>
         <Text style={styles.title}>Photo Gallery</Text>
       </View>
-      <FlatList
-        data={images}
-        renderItem={renderItem}
-        style={styles.flatlist}
-        numColumns={3}
-        showsVerticalScrollIndicator={false}
-      />
-      <ImageView
-        images={imageView}
-        imageIndex={0}
-        visible={imageViewVis}
-        onRequestClose={() => setImageViewVis(false)}
-      />
+      {emptyState && !isLoading && (
+        <View style={styles.center}>
+          <Text style={{fontSize: 20, fontWeight: '700'}}>
+            No pictures to show
+          </Text>
+        </View>
+      )}
+      {isLoading && (
+        <View style={styles.center}>
+          <ActivityIndicator size={'large'} />
+        </View>
+      )}
+      {!emptyState && !isLoading && (
+        <>
+          <FlatList
+            data={images}
+            renderItem={renderItem}
+            style={styles.flatlist}
+            numColumns={3}
+            showsVerticalScrollIndicator={false}
+          />
+          <ImageView
+            images={imageView}
+            imageIndex={0}
+            visible={imageViewVis}
+            onRequestClose={() => setImageViewVis(false)}
+          />
+        </>
+      )}
     </View>
   );
 };
@@ -145,6 +176,11 @@ const PictureScreen = ({navigation, route}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   titleContainer: {
     padding: 10,
