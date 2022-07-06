@@ -109,7 +109,7 @@ const VideoScreen = ({navigation, route}) => {
         style={[
           styles.itemStyle,
           index !== 0 && index % 3 !== 0 && {paddingLeft: 8},
-          disabled ? {opacity: 0.3} : {opacity: 1},
+          disabled ? {opacity: 0.5} : {opacity: 1},
         ]}>
         <Image
           source={{uri: videos[index]}}
