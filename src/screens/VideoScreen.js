@@ -108,7 +108,7 @@ const VideoScreen = ({navigation, route}) => {
         disabled={disabled}
         style={[
           styles.itemStyle,
-          index !== 0 && index % 3 !== 0 && {paddingLeft: 8},
+          index !== 0 && index % 3 !== 0 && {marginLeft: 8},
           disabled ? {opacity: 0.5} : {opacity: 1},
         ]}>
         <Image
@@ -122,10 +122,7 @@ const VideoScreen = ({navigation, route}) => {
           style={{
             position: 'absolute',
             top: SCREEN_WIDTH / 9,
-            left:
-              index !== 0 && index % 3 !== 0
-                ? SCREEN_WIDTH / 9 + 8
-                : SCREEN_WIDTH / 9,
+            left: SCREEN_WIDTH / 9,
           }}>
           {disabled && itemClicked === index && <ActivityIndicator />}
           {itemClicked !== index && (
