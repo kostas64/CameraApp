@@ -10,14 +10,17 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import Video from 'react-native-video';
 import {storage} from '../../firebase';
+import RNFetchBlob from 'rn-fetch-blob';
+import {SAFE_AREA_PADDING} from '../Constants';
+import IonIcon from 'react-native-vector-icons/Ionicons';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import {ref, listAll, getDownloadURL} from 'firebase/storage';
 import React, {useCallback, useEffect, useState} from 'react';
-import {SAFE_AREA_PADDING} from '../Constants';
-import Video from 'react-native-video';
-import RNFetchBlob from 'rn-fetch-blob';
 
+const BUTTON_SIZE = 40;
+const CONTENT_SPACING = 10;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const VideoScreen = ({navigation, route}) => {
@@ -26,6 +29,9 @@ const VideoScreen = ({navigation, route}) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [emptyState, setEmptyState] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [disabled, setDisabled] = useState(false);
+  const [itemClicked, setItemClicked] = useState(null);
 
   useEffect(() => {
     const focus = navigation.addListener('focus', () => {
@@ -71,11 +77,13 @@ const VideoScreen = ({navigation, route}) => {
   useEffect(() => {
     if (videoView.uri) {
       setModalVisible(true);
+      setDisabled(false);
     }
   }, [videoView]);
 
   const videoOpeningHandler = async item => {
     const videoUrl = item.replace('thumb_videos', 'videos');
+    setDisabled(true);
     RNFetchBlob.config({
       fileCache: true,
     })
@@ -83,17 +91,25 @@ const VideoScreen = ({navigation, route}) => {
       .then(res => {
         setVideoView({uri: `file:///${res.path()}`});
       })
-      .catch(err => console.log('Error fetching from storage', err));
+      .catch(err => {
+        console.log('Error fetching from storage', err);
+        setDisabled(false);
+      });
   };
 
   const renderItem = ({item, index}) => {
     return (
       <TouchableOpacity
-        onPress={() => videoOpeningHandler(item)}
+        onPress={() => {
+          videoOpeningHandler(item);
+          setItemClicked(index);
+        }}
         key={index}
+        disabled={disabled}
         style={[
           styles.itemStyle,
           index !== 0 && index % 3 !== 0 && {paddingLeft: 8},
+          disabled ? {opacity: 0.3} : {opacity: 1},
         ]}>
         <Image
           source={{uri: videos[index]}}
@@ -111,7 +127,10 @@ const VideoScreen = ({navigation, route}) => {
                 ? SCREEN_WIDTH / 9 + 8
                 : SCREEN_WIDTH / 9,
           }}>
-          <AntDesign size={20} color={'white'} name={'play'} />
+          {disabled && itemClicked === index && <ActivityIndicator />}
+          {itemClicked !== index && (
+            <AntDesign size={20} color={'white'} name={'play'} />
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -147,6 +166,15 @@ const VideoScreen = ({navigation, route}) => {
       });
     });
   }, []);
+
+  const onEnd = () => {
+    setPaused(true);
+  };
+
+  const onLoad = () => {
+    setPaused(false);
+    setItemClicked(null);
+  };
 
   return (
     <View
@@ -185,7 +213,40 @@ const VideoScreen = ({navigation, route}) => {
           <Modal
             visible={modalVisible}
             onRequestClose={() => setModalVisible(false)}>
-            <Video source={videoView} style={StyleSheet.absoluteFill} />
+            <Video
+              paused={paused}
+              source={videoView}
+              onEnd={onEnd}
+              onLoad={onLoad}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.leftButtonRow}>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => setModalVisible(false)}>
+                <IonIcon name="close" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                alignItems: 'center',
+                marginBottom: 20,
+                justifyContent: 'flex-end',
+              }}>
+              <View style={styles.button}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPaused(oldState => !oldState);
+                  }}>
+                  {!paused ? (
+                    <IonIcon name="pause" size={24} color="white" />
+                  ) : (
+                    <IonIcon name="play" size={24} color="white" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           </Modal>
         </>
       )}
@@ -220,6 +281,20 @@ const styles = StyleSheet.create({
   },
   itemStyle: {
     marginTop: 10,
+  },
+  button: {
+    marginBottom: CONTENT_SPACING,
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    borderRadius: BUTTON_SIZE / 2,
+    backgroundColor: 'rgba(140, 140, 140, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  leftButtonRow: {
+    position: 'absolute',
+    left: SAFE_AREA_PADDING.paddingLeft,
+    top: SAFE_AREA_PADDING.paddingTop,
   },
 });
 
